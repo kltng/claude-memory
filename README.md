@@ -1,6 +1,6 @@
 # claude-memory
 
-Cross-machine memory system for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Records every session as searchable markdown, syncs across machines via Git, and exposes full-text search through an MCP server.
+Cross-machine memory system for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Records every session as searchable markdown, syncs across machines via Git, and exposes full-text search, semantic search, session summarization, and a knowledge graph through an MCP server.
 
 ## The Problem
 
@@ -29,18 +29,24 @@ Machine A                        Machine B
                    └──────────────────────────────────────────┘
                           │ git pull (SessionStart)
                           ▼
-                   ┌──────────────┐
-                   │  MCP Server  │
-                   │  MiniSearch  │──── search_memory("query")
-                   │  (local FTS) │──── list_sessions(project)
-                   └──────────────┘──── get_session(filepath)
+                   ┌──────────────────────────────────────┐
+                   │            MCP Server                │
+                   │  ┌────────────┐  ┌────────────────┐  │
+                   │  │ MiniSearch │  │ Transformers.js │  │
+                   │  │  (FTS)     │  │ (vectors)       │  │
+                   │  └────────────┘  └────────────────┘  │
+                   │  ┌────────────┐  ┌────────────────┐  │
+                   │  │ Summaries  │  │ Knowledge      │  │
+                   │  │ (digests)  │  │ Graph          │  │
+                   │  └────────────┘  └────────────────┘  │
+                   └──────────────────────────────────────┘
 ```
 
 **On every session end:** the JSONL transcript is converted to clean markdown, committed, and pushed to GitHub.
 
 **On every session start:** git pulls the latest sessions from all machines and rebuilds the search index.
 
-**During any session:** agents can call `search_memory` to recall past conversations, patterns, and decisions across all machines and projects.
+**During any session:** agents can search memory (keyword or semantic), summarize past sessions, and build a knowledge graph of concepts, tools, and patterns across all projects.
 
 ## Quick Start
 
@@ -131,65 +137,89 @@ The timeout is caused by...
 
 ### Search
 
-Full-text search powered by [MiniSearch](https://github.com/lucaong/minisearch):
+#### Full-Text Search (MiniSearch)
 
 - Markdown files are chunked by headings (`##` / `###`)
 - Each chunk is indexed with project name, date, session ID, and heading
 - Fuzzy matching and prefix search enabled
 - Search index stored locally as `search-index.json` (gitignored — rebuilt from markdown)
 
+#### Semantic / Vector Search (Transformers.js)
+
+- Uses [`all-MiniLM-L6-v2`](https://huggingface.co/Xenova/all-MiniLM-L6-v2) for 384-dimensional embeddings
+- Runs entirely locally via [@huggingface/transformers](https://github.com/huggingface/transformers.js) — no external APIs or Ollama required
+- First run downloads the model (~80MB), cached locally afterwards
+- **Hybrid search** combines vector + keyword results using Reciprocal Rank Fusion (RRF)
+- Vector index stored locally as `vector-index.json` (gitignored — rebuilt from markdown)
+
+### Session Summarization
+
+Agents can summarize sessions into concise digests:
+
+1. Call `get_unsummarized_sessions` to find sessions needing summaries
+2. Read each session with `get_session`
+3. Call `save_session_summary` with a title, summary, tags, and extracted entities/relations
+
+Summaries are stored at `summaries/<project>/digests/<session-id>.md` and automatically indexed for search. The `save_session_summary` tool can simultaneously populate the knowledge graph with extracted entities and relations.
+
+### Knowledge Graph
+
+A lightweight entity–relation graph that tracks concepts, tools, patterns, and their connections across all projects:
+
+- **Entity types:** project, file, concept, tool, library, pattern, error, person, service
+- **Relation types:** uses, depends_on, implements, fixes, related_to, part_of, alternative_to, caused_by, learned_from, configured_with, deployed_to
+- **Provenance:** every entity/relation tracks which sessions and projects it was mentioned in
+- **Queries:** search entities, explore connections, find paths between concepts, identify hub entities
+- Stored as `knowledge-graph.json` (git-tracked — shared across machines)
+
 ## MCP Tools
 
-The MCP server exposes 5 tools to Claude Code agents:
+The MCP server exposes 15 tools:
 
-### `search_memory`
+### Search
 
-Search across all recorded sessions and saved insights.
+| Tool | Description |
+|------|-------------|
+| `search_memory` | Full-text keyword search across all sessions and insights |
+| `semantic_search` | Vector similarity search, with hybrid mode (FTS + vectors via RRF). Falls back to FTS if vector index not built |
+| `rebuild_index` | Rebuild the full-text search index |
+| `rebuild_vector_index` | Rebuild the vector index (downloads model on first run) |
 
+### Sessions
+
+| Tool | Description |
+|------|-------------|
+| `list_sessions` | List sessions filtered by project and/or date |
+| `get_session` | Retrieve full markdown transcript (truncated at 50K chars) |
+| `save_insight` | Save a curated insight to `summaries/<project>/<topic>.md` |
+
+### Summarization
+
+| Tool | Description |
+|------|-------------|
+| `get_unsummarized_sessions` | List sessions that don't have a summary digest yet |
+| `save_session_summary` | Save a session summary with title, tags, and optional KG entities/relations |
+| `list_summaries` | List all summaries and insights across projects |
+
+### Knowledge Graph
+
+| Tool | Description |
+|------|-------------|
+| `kg_add` | Add entities and relations (auto-creates missing entities, deduplicates by name) |
+| `kg_search` | Search entities by name, type, or project |
+| `kg_query` | Explore entity connections, find paths between entities, list hubs, or view stats |
+| `kg_remove` | Remove an entity (and its relations) or a specific relation |
+
+## Updating
+
+To pull new features from the public template into your installed copy:
+
+```bash
+cd ~/codebases/claude-memory
+./update.sh
 ```
-query: "database timeout fix"
-project: "my-app"        (optional — filter by project)
-limit: 10                (optional — default 20)
-```
 
-Returns ranked results with project, date, heading, session ID, and relevance score.
-
-### `list_sessions`
-
-List recorded sessions with optional filters.
-
-```
-project: "my-app"        (optional)
-date: "2026-03"          (optional — prefix match)
-limit: 20                (optional — default 50)
-```
-
-### `get_session`
-
-Retrieve the full markdown transcript of a session.
-
-```
-filepath: "sessions/my-app/2026-03-09/abc123.md"
-```
-
-Truncated at 50,000 characters to stay within context limits.
-
-### `save_insight`
-
-Save a curated insight to the summaries collection.
-
-```
-project: "my-app"
-topic: "database-patterns"
-content: "## Connection Pooling\n\nAlways use..."
-append: true             (optional — default true)
-```
-
-Saved to `summaries/<project>/<topic>.md`. Useful for distilling recurring patterns from raw sessions.
-
-### `rebuild_index`
-
-Manually rebuild the search index from all markdown files.
+This fetches upstream changes, merges them (keeping your session data, taking upstream code), reinstalls dependencies, rebuilds the search index, and pushes to your private repo.
 
 ## Project Structure
 
@@ -201,27 +231,35 @@ claude-memory/
 │   │       └── abc123.md
 │   └── other-project/
 │       └── ...
-├── summaries/                   # Curated insights (git tracked)
+├── summaries/                   # Curated insights + session digests (git tracked)
 │   └── my-app/
-│       └── database-patterns.md
+│       ├── database-patterns.md
+│       └── digests/
+│           └── abc123.md
 ├── src/
-│   ├── server.ts                # MCP server (5 tools)
+│   ├── server.ts                # MCP server (15 tools)
 │   ├── capture.ts               # JSONL → markdown converter
-│   ├── search.ts                # MiniSearch wrapper
-│   ├── rebuild-index.ts         # Index rebuild script
+│   ├── search.ts                # MiniSearch wrapper (FTS)
+│   ├── vector-search.ts         # Transformers.js embeddings + cosine similarity
+│   ├── knowledge-graph.ts       # Entity–relation graph with BFS path finding
+│   ├── rebuild-index.ts         # FTS index rebuild script
+│   ├── rebuild-vector-index.ts  # Vector index rebuild script
 │   ├── import-all.ts            # Bulk import from ~/.claude/projects/
 │   ├── install-config.ts        # Installer config helper
 │   ├── sync.ts                  # Git pull/push helper
-│   └── __tests__/               # 70 tests
+│   └── __tests__/               # 81 tests
 │       ├── capture.test.ts
 │       ├── search.test.ts
 │       ├── server.test.ts
-│       └── fixtures/
+│       └── knowledge-graph.test.ts
 ├── hooks/
 │   ├── session-start.sh         # git pull + rebuild index
 │   └── session-end.sh           # capture + git push
 ├── install.sh                   # Automated installer
-├── search-index.json            # Full-text index (gitignored)
+├── update.sh                    # Pull upstream code updates
+├── search-index.json            # FTS index (gitignored)
+├── vector-index.json            # Vector index (gitignored)
+├── knowledge-graph.json         # Knowledge graph (git tracked)
 ├── package.json
 └── tsconfig.json
 ```
@@ -282,14 +320,16 @@ claude-memory/
 
 | Component | Tokens | When |
 |-----------|--------|------|
-| Tool definitions (5 tools) | ~700 | Every session (constant) |
+| Tool definitions (15 tools) | ~2,000 | Every session (constant, deferred) |
 | `search_memory` result | ~300–500 | Per search call |
+| `semantic_search` result | ~400–800 | Per search call |
 | `list_sessions` result | ~200–1,000 | Per list call |
 | `get_session` result | ~500–12,500 | Per retrieval (capped) |
-| `save_insight` confirmation | ~50 | Per save call |
+| `kg_query` result | ~200–1,000 | Per query call |
+| `save_*` confirmations | ~50 | Per save call |
 | Hooks | 0 | Run outside context window |
 
-**Constant overhead: ~700 tokens per session (+10–13% of typical baseline).** Claude Code's MCP Tool Search defers tool loading, so the actual overhead is near-zero until a memory tool is invoked.
+Claude Code's MCP Tool Search defers tool loading, so the actual overhead is near-zero until a memory tool is invoked.
 
 ## Requirements
 
@@ -301,21 +341,18 @@ claude-memory/
 ## Development
 
 ```bash
-# Run tests
+# Run all tests (81 tests)
 npm test
 
-# Rebuild search index manually
+# Rebuild full-text search index
 npx tsx src/rebuild-index.ts
+
+# Rebuild vector search index (downloads model on first run)
+npx tsx src/rebuild-vector-index.ts
 
 # Import all local sessions
 npx tsx src/import-all.ts
 ```
-
-## Roadmap
-
-- [ ] **Vector search** — Add LanceDB + Ollama (`nomic-embed-text`) for semantic search alongside full-text
-- [ ] **Session summarization** — Auto-summarize sessions into topic-level summaries using Claude
-- [ ] **Cross-project knowledge graph** — Track relationships between concepts across projects
 
 ## License
 
