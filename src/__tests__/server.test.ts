@@ -191,23 +191,71 @@ function handleListSessions(
   };
 }
 
-function handleGetSession(memoryRoot: string, filepath: string) {
+function handleGetSession(memoryRoot: string, filepath: string, heading?: string, offset?: number, limit?: number) {
   const fullPath = join(memoryRoot, filepath);
   if (!existsSync(fullPath)) {
     return { text: `Session file not found: ${filepath}` };
   }
 
-  const content = readFileSync(fullPath, "utf-8");
-  const maxLen = 50000;
-  const truncated =
-    content.length > maxLen
-      ? content.slice(0, maxLen) +
-        "\n\n…[truncated, total " +
-        content.length +
-        " chars]"
-      : content;
+  const rawContent = readFileSync(fullPath, "utf-8");
 
-  return { text: truncated };
+  // If no heading filter and no pagination, return with truncation (legacy behavior)
+  if (!heading && offset === undefined && limit === undefined) {
+    const maxLen = 50000;
+    const truncated =
+      rawContent.length > maxLen
+        ? rawContent.slice(0, maxLen) +
+          "\n\n…[truncated, total " +
+          rawContent.length +
+          " chars]"
+        : rawContent;
+    return { text: truncated };
+  }
+
+  // Split into sections by ## headings
+  const sections: { heading: string; content: string }[] = [];
+  const lines = rawContent.split("\n");
+  let currentHeading = "top";
+  let currentLines: string[] = [];
+
+  for (const line of lines) {
+    const match = line.match(/^#{1,3}\s+(.+)/);
+    if (match) {
+      if (currentLines.length > 0) {
+        sections.push({ heading: currentHeading, content: currentLines.join("\n").trim() });
+      }
+      currentHeading = match[1];
+      currentLines = [];
+    } else {
+      currentLines.push(line);
+    }
+  }
+  if (currentLines.length > 0) {
+    sections.push({ heading: currentHeading, content: currentLines.join("\n").trim() });
+  }
+
+  // Filter by heading if specified
+  let filtered = sections;
+  if (heading) {
+    const query = heading.toLowerCase();
+    filtered = sections.filter(s => s.heading.toLowerCase().includes(query));
+  }
+
+  // Apply pagination
+  const startIdx = offset || 0;
+  const maxSections = limit || (heading ? filtered.length : 20);
+  const page = filtered.slice(startIdx, startIdx + maxSections);
+
+  if (page.length === 0) {
+    return { text: `No sections matching "${heading}" found in ${filepath}` };
+  }
+
+  const result = page.map(s => `## ${s.heading}\n\n${s.content}`).join("\n\n---\n\n");
+  const meta = `_Showing ${page.length}/${filtered.length} sections` +
+    (heading ? ` matching "${heading}"` : "") +
+    ` from ${filepath}_\n\n`;
+
+  return { text: meta + result };
 }
 
 function handleSaveInsight(
@@ -400,6 +448,26 @@ describe("get_session handler", () => {
   it("returns not-found message for missing file", () => {
     const result = handleGetSession(root, "sessions/webapp/2026-03-09/nope.md");
     assert.ok(result.text.includes("Session file not found"));
+  });
+
+  it("retrieves a specific section by heading query", () => {
+    const result = handleGetSession(
+      root,
+      "sessions/webapp/2026-03-09/sess-aaa.md",
+      "Assistant"
+    );
+    // Should return only the matching section, not the full file
+    assert.ok(result.text.includes("CSS layout"));
+    assert.ok(!result.text.includes("# Session: sess-aaa"), "Should not include full header when filtering by section");
+  });
+
+  it("returns full session when no heading filter is given", () => {
+    const result = handleGetSession(
+      root,
+      "sessions/webapp/2026-03-09/sess-aaa.md"
+    );
+    assert.ok(result.text.includes("# Session: sess-aaa"));
+    assert.ok(result.text.includes("CSS layout"));
   });
 
   it("truncates very large files", () => {

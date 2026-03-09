@@ -146,26 +146,74 @@ server.tool(
 
 server.tool(
   "get_session",
-  "Retrieve the full markdown transcript of a specific session.",
+  "Retrieve a session transcript. Use 'heading' to get a specific section (much cheaper than full session). Use 'offset'/'limit' for pagination.",
   {
     filepath: z.string().describe("Relative path to the session file (e.g., 'sessions/lcsh/2026-03-09/abc123.md')"),
+    heading: z.string().optional().describe("Filter to sections matching this text in their heading (e.g., 'recall', 'Key Takeaways'). Case-insensitive substring match."),
+    offset: z.coerce.number().optional().describe("Start from this section index (0-based, for pagination)"),
+    limit: z.coerce.number().optional().describe("Max sections to return (default: all for heading filter, 20 for full session)"),
   },
-  async ({ filepath }) => {
+  async ({ filepath, heading, offset, limit }) => {
     const fullPath = join(MEMORY_ROOT, filepath);
     if (!existsSync(fullPath)) {
       return { content: [{ type: "text" as const, text: `Session file not found: ${filepath}` }] };
     }
 
-    const content = readFileSync(fullPath, "utf-8");
-    // Truncate if too large
-    const maxLen = 50000;
-    const truncated = content.length > maxLen
-      ? content.slice(0, maxLen) + "\n\n…[truncated, total " + content.length + " chars]"
-      : content;
+    const rawContent = readFileSync(fullPath, "utf-8");
 
-    return {
-      content: [{ type: "text" as const, text: truncated }],
-    };
+    // If no heading filter and no pagination, return with truncation (legacy behavior)
+    if (!heading && offset === undefined && limit === undefined) {
+      const maxLen = 50000;
+      const truncated = rawContent.length > maxLen
+        ? rawContent.slice(0, maxLen) + "\n\n…[truncated, total " + rawContent.length + " chars]"
+        : rawContent;
+      return { content: [{ type: "text" as const, text: truncated }] };
+    }
+
+    // Split into sections by ## headings
+    const sections: { heading: string; content: string }[] = [];
+    const lines = rawContent.split("\n");
+    let currentHeading = "top";
+    let currentLines: string[] = [];
+
+    for (const line of lines) {
+      const match = line.match(/^#{1,3}\s+(.+)/);
+      if (match) {
+        if (currentLines.length > 0) {
+          sections.push({ heading: currentHeading, content: currentLines.join("\n").trim() });
+        }
+        currentHeading = match[1];
+        currentLines = [];
+      } else {
+        currentLines.push(line);
+      }
+    }
+    if (currentLines.length > 0) {
+      sections.push({ heading: currentHeading, content: currentLines.join("\n").trim() });
+    }
+
+    // Filter by heading if specified
+    let filtered = sections;
+    if (heading) {
+      const query = heading.toLowerCase();
+      filtered = sections.filter(s => s.heading.toLowerCase().includes(query));
+    }
+
+    // Apply pagination
+    const startIdx = offset || 0;
+    const maxSections = limit || (heading ? filtered.length : 20);
+    const page = filtered.slice(startIdx, startIdx + maxSections);
+
+    if (page.length === 0) {
+      return { content: [{ type: "text" as const, text: `No sections matching "${heading}" found in ${filepath}` }] };
+    }
+
+    const result = page.map(s => `## ${s.heading}\n\n${s.content}`).join("\n\n---\n\n");
+    const meta = `_Showing ${page.length}/${filtered.length} sections` +
+      (heading ? ` matching "${heading}"` : "") +
+      ` from ${filepath}_\n\n`;
+
+    return { content: [{ type: "text" as const, text: meta + result }] };
   }
 );
 
