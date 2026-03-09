@@ -2,5 +2,6 @@ node_modules/
 dist/
 .lancedb/
 search-index.json
+vector-index.json
 *.lance
 .DS_Store

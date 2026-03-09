@@ -9,17 +9,26 @@ import { z } from "zod";
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { MemorySearch } from "./search.js";
+import { VectorSearch } from "./vector-search.js";
 
 const MEMORY_ROOT = process.env.CLAUDE_MEMORY_ROOT || dirname(new URL(import.meta.url).pathname).replace("/src", "");
 const search = new MemorySearch(MEMORY_ROOT);
+const vectorSearch = new VectorSearch(MEMORY_ROOT);
 
-// Load or rebuild index on startup
+// Load or rebuild FTS index on startup
 if (!search.load()) {
   const count = search.rebuild(MEMORY_ROOT);
   search.save();
-  process.stderr.write(`claude-memory: built index with ${count} chunks\n`);
+  process.stderr.write(`claude-memory: built FTS index with ${count} chunks\n`);
 } else {
-  process.stderr.write(`claude-memory: loaded index with ${search.documentCount} chunks\n`);
+  process.stderr.write(`claude-memory: loaded FTS index with ${search.documentCount} chunks\n`);
+}
+
+// Load vector index if available (don't rebuild on startup — it's slow)
+if (vectorSearch.load()) {
+  process.stderr.write(`claude-memory: loaded vector index with ${vectorSearch.documentCount} chunks\n`);
+} else {
+  process.stderr.write(`claude-memory: no vector index found — run rebuild_vector_index to build it\n`);
 }
 
 const server = new McpServer({
@@ -191,18 +200,94 @@ server.tool(
   }
 );
 
+// ─── Tool: semantic_search ──────────────────────────────────────────
+
+server.tool(
+  "semantic_search",
+  "Semantic search across sessions using vector embeddings. Better than keyword search for finding conceptually similar content (e.g., 'how to fix timeouts' finds discussions about connection pooling). Falls back to keyword search if vector index is not built yet.",
+  {
+    query: z.string().describe("Natural language search query"),
+    project: z.string().optional().describe("Filter by project name"),
+    limit: z.number().optional().describe("Max results to return (default 10)"),
+    hybrid: z.boolean().optional().describe("Combine vector + keyword search using RRF (default true)"),
+  },
+  async ({ query, project, limit, hybrid }) => {
+    const useHybrid = hybrid !== false;
+    const maxResults = limit || 10;
+
+    if (vectorSearch.documentCount === 0) {
+      // Fallback to FTS
+      const results = search.search(query, { project, limit: maxResults });
+      if (results.length === 0) {
+        return { content: [{ type: "text" as const, text: `No results found for "${query}". Vector index not built — run rebuild_vector_index first for semantic search.` }] };
+      }
+      const formatted = results.map((r, i) =>
+        `### ${i + 1}. [${r.project}] ${r.heading} (FTS score: ${r.score.toFixed(1)})\n- **Session:** ${r.sessionId}\n- **Date:** ${r.date}\n- **File:** ${r.filepath}`
+      );
+      return {
+        content: [{ type: "text" as const, text: `No vector index — falling back to keyword search.\nFound ${results.length} results:\n\n${formatted.join("\n\n")}` }],
+      };
+    }
+
+    let results;
+    if (useHybrid) {
+      const ftsResults = search.search(query, { project, limit: 50 }).map((r) => ({ id: r.id, score: r.score }));
+      results = await vectorSearch.hybridSearch(query, ftsResults, { project, limit: maxResults });
+    } else {
+      results = await vectorSearch.search(query, { project, limit: maxResults });
+    }
+
+    if (results.length === 0) {
+      return { content: [{ type: "text" as const, text: `No results found for "${query}".` }] };
+    }
+
+    const formatted = results.map((r, i) =>
+      `### ${i + 1}. [${r.project}] ${r.heading} (similarity: ${r.similarity.toFixed(3)})\n- **Session:** ${r.sessionId}\n- **Date:** ${r.date}\n- **File:** ${r.filepath}\n- **Snippet:** ${r.snippet}…`
+    );
+
+    const mode = useHybrid ? "hybrid (vector + keyword)" : "vector";
+    return {
+      content: [{
+        type: "text" as const,
+        text: `Found ${results.length} results via ${mode} search for "${query}":\n\n${formatted.join("\n\n")}`,
+      }],
+    };
+  }
+);
+
 // ─── Tool: rebuild_index ────────────────────────────────────────────
 
 server.tool(
   "rebuild_index",
-  "Rebuild the search index from all markdown files. Run this after pulling new sessions from git.",
+  "Rebuild the full-text search index from all markdown files. Run this after pulling new sessions from git.",
   {},
   async () => {
     const count = search.rebuild(MEMORY_ROOT);
     search.save();
     return {
-      content: [{ type: "text" as const, text: `Index rebuilt: ${count} chunks indexed.` }],
+      content: [{ type: "text" as const, text: `FTS index rebuilt: ${count} chunks indexed.` }],
     };
+  }
+);
+
+// ─── Tool: rebuild_vector_index ─────────────────────────────────────
+
+server.tool(
+  "rebuild_vector_index",
+  "Rebuild the vector/semantic search index. Downloads the embedding model on first run (~80MB). Embeds all markdown chunks — may take a few minutes for large collections.",
+  {},
+  async () => {
+    try {
+      const count = await vectorSearch.rebuild(MEMORY_ROOT);
+      vectorSearch.save();
+      return {
+        content: [{ type: "text" as const, text: `Vector index rebuilt: ${count} chunks embedded and indexed.` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text" as const, text: `Vector index rebuild failed: ${err}` }],
+      };
+    }
   }
 );
 

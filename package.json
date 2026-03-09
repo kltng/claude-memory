@@ -7,6 +7,8 @@
     "capture": "tsx src/capture.ts",
     "server": "tsx src/server.ts",
     "rebuild": "tsx src/rebuild-index.ts",
+    "rebuild-vectors": "tsx src/rebuild-vector-index.ts",
+    "update": "./update.sh",
     "sync-pull": "tsx src/sync.ts pull",
     "sync-push": "tsx src/sync.ts push",
     "test": "tsx --test src/__tests__/*.test.ts",
@@ -14,6 +16,7 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.4.0",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "minisearch": "^7.1.0",
     "zod": "^3.24.0"
