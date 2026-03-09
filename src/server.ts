@@ -53,10 +53,10 @@ server.tool(
   {
     query: z.string().describe("Search query — keywords, phrases, or questions"),
     project: z.string().optional().describe("Filter by project name (e.g., 'lcsh', 'calendar-converter')"),
-    limit: z.number().optional().describe("Max results to return (default 20)"),
+    limit: z.number().optional().describe("Max results to return (default 10)"),
   },
   async ({ query, project, limit }) => {
-    const results = search.search(query, { project, limit: limit || 20 });
+    const results = search.search(query, { project, limit: limit || 10 });
 
     if (results.length === 0) {
       return {
@@ -65,7 +65,7 @@ server.tool(
     }
 
     const formatted = results.map((r, i) => {
-      return `### ${i + 1}. [${r.project}] ${r.heading} (score: ${r.score.toFixed(1)})\n- **Session:** ${r.sessionId}\n- **Date:** ${r.date}\n- **File:** ${r.filepath}`;
+      return `### ${i + 1}. [${r.project}] ${r.heading} (score: ${r.score.toFixed(1)})\n- **Session:** ${r.sessionId}\n- **Date:** ${r.date}\n- **File:** ${r.filepath}\n- **Snippet:** ${r.snippet}`;
     });
 
     return {

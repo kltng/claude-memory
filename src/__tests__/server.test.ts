@@ -114,14 +114,14 @@ function handleSearchMemory(
   project?: string,
   limit?: number
 ) {
-  const results = search.search(query, { project, limit: limit || 20 });
+  const results = search.search(query, { project, limit: limit || 10 });
 
   if (results.length === 0) {
     return { text: `No results found for "${query}".` };
   }
 
   const formatted = results.map((r, i) => {
-    return `### ${i + 1}. [${r.project}] ${r.heading} (score: ${r.score.toFixed(1)})\n- **Session:** ${r.sessionId}\n- **Date:** ${r.date}\n- **File:** ${r.filepath}`;
+    return `### ${i + 1}. [${r.project}] ${r.heading} (score: ${r.score.toFixed(1)})\n- **Session:** ${r.sessionId}\n- **Date:** ${r.date}\n- **File:** ${r.filepath}\n- **Snippet:** ${r.snippet}`;
   });
 
   return {
@@ -287,6 +287,11 @@ describe("search_memory handler", () => {
     assert.ok(result.text.includes("Found"));
     // All results should be from cli-tool
     assert.ok(!result.text.includes("[webapp]"));
+  });
+
+  it("includes content snippet in results", () => {
+    const result = handleSearchMemory(search, "CSS layout bug");
+    assert.ok(result.text.includes("**Snippet:**"), "Should include snippet field");
   });
 
   it("includes score, session, date, and file in output", () => {
