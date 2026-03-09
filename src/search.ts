@@ -29,7 +29,7 @@ export interface SearchResult {
 }
 
 const FIELDS = ["heading", "content", "project"];
-const STORE_FIELDS = ["project", "date", "sessionId", "heading", "filepath"];
+const STORE_FIELDS = ["project", "date", "sessionId", "heading", "filepath", "content"];
 
 export class MemorySearch {
   private index: MiniSearch<SearchDocument>;
@@ -167,7 +167,7 @@ export class MemorySearch {
       date: (r as Record<string, unknown>).date as string,
       sessionId: (r as Record<string, unknown>).sessionId as string,
       heading: (r as Record<string, unknown>).heading as string,
-      snippet: this.extractSnippet(r.id as string, query),
+      snippet: this.extractSnippet((r as Record<string, unknown>).content as string || "", query),
       filepath: (r as Record<string, unknown>).filepath as string,
       score: r.score,
     }));
@@ -176,9 +176,32 @@ export class MemorySearch {
   /**
    * Extract a relevant snippet around the query match
    */
-  private extractSnippet(docId: string, _query: string): string {
-    // MiniSearch doesn't store full content in results, return heading-based snippet
-    return `Match in: ${docId}`;
+  private extractSnippet(content: string, query: string, maxLen = 300): string {
+    if (!content) return "";
+    const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+    const lines = content.split("\n");
+
+    // Find the line with the best match
+    let bestIdx = 0;
+    let bestScore = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const lower = lines[i].toLowerCase();
+      let score = 0;
+      for (const term of queryTerms) {
+        if (lower.includes(term)) score++;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+
+    // Extract surrounding context
+    const start = Math.max(0, bestIdx - 1);
+    const end = Math.min(lines.length, bestIdx + 3);
+    let snippet = lines.slice(start, end).join("\n").trim();
+    if (snippet.length > maxLen) snippet = snippet.slice(0, maxLen) + "…";
+    return snippet;
   }
 
   /**

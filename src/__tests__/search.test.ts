@@ -189,6 +189,15 @@ describe("MemorySearch", () => {
       assert.ok(results.length <= 2);
     });
 
+    it("returns meaningful content snippets, not just IDs", () => {
+      const results = search.search("authentication bug");
+      assert.ok(results.length > 0);
+      const r = results[0];
+      // Snippet should contain actual content, not "Match in: ..."
+      assert.ok(!r.snippet.startsWith("Match in:"), `Snippet should not be placeholder: ${r.snippet}`);
+      assert.ok(r.snippet.length > 20, `Snippet should have meaningful content: ${r.snippet}`);
+    });
+
     it("returns empty array for nonsense query", () => {
       const results = search.search("xyzzyplugh12345");
       assert.strictEqual(results.length, 0);
