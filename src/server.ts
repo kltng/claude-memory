@@ -53,7 +53,7 @@ server.tool(
   {
     query: z.string().describe("Search query — keywords, phrases, or questions"),
     project: z.string().optional().describe("Filter by project name (e.g., 'lcsh', 'calendar-converter')"),
-    limit: z.number().optional().describe("Max results to return (default 10)"),
+    limit: z.coerce.number().optional().describe("Max results to return (default 10)"),
   },
   async ({ query, project, limit }) => {
     const results = search.search(query, { project, limit: limit || 10 });
@@ -85,7 +85,7 @@ server.tool(
   {
     project: z.string().optional().describe("Filter by project name"),
     date: z.string().optional().describe("Filter by date (YYYY-MM-DD) or date prefix (YYYY-MM)"),
-    limit: z.number().optional().describe("Max sessions to return (default 50)"),
+    limit: z.coerce.number().optional().describe("Max sessions to return (default 50)"),
   },
   async ({ project, date, limit }) => {
     const sessionsDir = join(MEMORY_ROOT, "sessions");
@@ -265,7 +265,7 @@ server.tool(
   {
     query: z.string().describe("Natural language search query"),
     project: z.string().optional().describe("Filter by project name"),
-    limit: z.number().optional().describe("Max results to return (default 10)"),
+    limit: z.coerce.number().optional().describe("Max results to return (default 10)"),
     hybrid: z.boolean().optional().describe("Combine vector + keyword search using RRF (default true)"),
   },
   async ({ query, project, limit, hybrid }) => {
@@ -359,7 +359,7 @@ server.tool(
   "List sessions that don't have a summary yet. Use this to find sessions that need summarization, then read each one and call save_session_summary.",
   {
     project: z.string().optional().describe("Filter by project name"),
-    limit: z.number().optional().describe("Max sessions to return (default 20)"),
+    limit: z.coerce.number().optional().describe("Max sessions to return (default 20)"),
   },
   async ({ project, limit }) => {
     const sessionsDir = join(MEMORY_ROOT, "sessions");
@@ -515,7 +515,7 @@ server.tool(
   "List all session summaries and insights, optionally filtered by project.",
   {
     project: z.string().optional().describe("Filter by project name"),
-    limit: z.number().optional().describe("Max results (default 50)"),
+    limit: z.coerce.number().optional().describe("Max results (default 50)"),
   },
   async ({ project, limit }) => {
     const summariesDir = join(MEMORY_ROOT, "summaries");
@@ -648,7 +648,7 @@ server.tool(
     query: z.string().optional().describe("Search in entity names and descriptions"),
     type: z.enum(ENTITY_TYPES).optional().describe("Filter by entity type"),
     project: z.string().optional().describe("Filter by project where entity was mentioned"),
-    limit: z.number().optional().describe("Max results (default 20)"),
+    limit: z.coerce.number().optional().describe("Max results (default 20)"),
   },
   async ({ query, type, project, limit }) => {
     const results = kg.searchEntities({ query, type, project, limit: limit || 20 });
@@ -683,7 +683,7 @@ server.tool(
     from: z.string().optional().describe("Find path FROM this entity (use with 'to')"),
     to: z.string().optional().describe("Find path TO this entity (use with 'from')"),
     hubs: z.boolean().optional().describe("Return the most connected entities"),
-    limit: z.number().optional().describe("Max results (default 20)"),
+    limit: z.coerce.number().optional().describe("Max results (default 20)"),
   },
   async ({ entity, from, to, hubs, limit }) => {
     // Mode 1: explore an entity's connections
