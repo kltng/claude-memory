@@ -270,7 +270,7 @@ server.tool(
   },
   async ({ query, project, limit, hybrid }) => {
     const useHybrid = hybrid !== false;
-    const maxResults = limit || 10;
+    const maxResults = limit || 5;
 
     if (vectorSearch.documentCount === 0) {
       // Fallback to FTS

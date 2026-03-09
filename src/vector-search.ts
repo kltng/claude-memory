@@ -141,7 +141,7 @@ export class VectorSearch {
       heading: s.doc.heading,
       filepath: s.doc.filepath,
       similarity: s.similarity,
-      snippet: s.doc.content.slice(0, 200),
+      snippet: s.doc.content.slice(0, 500),
     }));
   }
 
