@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { join } from "path";
 import {
   deriveProjectName,
+  extractRepoName,
   formatDate,
   truncate,
   stripSystemTags,
@@ -31,6 +32,65 @@ describe("deriveProjectName", () => {
   it("handles trailing slash by returning empty string", () => {
     // basename("/foo/bar/") returns "bar" in Node
     assert.strictEqual(deriveProjectName("/foo/bar/"), "bar");
+  });
+});
+
+describe("extractRepoName", () => {
+  it("extracts name from HTTPS URL", () => {
+    assert.strictEqual(
+      extractRepoName("https://github.com/kltng/claude-memory.git"),
+      "claude-memory"
+    );
+  });
+
+  it("extracts name from HTTPS URL without .git", () => {
+    assert.strictEqual(
+      extractRepoName("https://github.com/kltng/claude-memory"),
+      "claude-memory"
+    );
+  });
+
+  it("extracts name from SSH URL", () => {
+    assert.strictEqual(
+      extractRepoName("git@github.com:kltng/claude-memory.git"),
+      "claude-memory"
+    );
+  });
+
+  it("extracts name from SSH URL without .git", () => {
+    assert.strictEqual(
+      extractRepoName("git@github.com:kltng/claude-memory"),
+      "claude-memory"
+    );
+  });
+
+  it("handles GitLab-style URLs", () => {
+    assert.strictEqual(
+      extractRepoName("git@gitlab.com:team/subgroup/my-app.git"),
+      "my-app"
+    );
+  });
+
+  it("handles HTTPS with nested paths", () => {
+    assert.strictEqual(
+      extractRepoName("https://gitlab.com/team/subgroup/my-app.git"),
+      "my-app"
+    );
+  });
+});
+
+describe("deriveProjectName (git integration)", () => {
+  it("falls back to folder name for non-git directory", () => {
+    // /tmp is not a git repo
+    assert.strictEqual(deriveProjectName("/tmp"), "tmp");
+  });
+
+  it("uses git remote for actual git repos", () => {
+    // The test is running inside the claude-memory repo itself
+    const cwd = join(import.meta.dirname, "../..");
+    const name = deriveProjectName(cwd);
+    // Should derive from git remote, not folder name
+    assert.strictEqual(name, "claude-memory");
   });
 });
 

@@ -5,6 +5,7 @@
  */
 
 import { readFileSync, mkdirSync, writeFileSync, existsSync } from "fs";
+import { execSync } from "child_process";
 import { basename, dirname } from "path";
 
 interface HookInput {
@@ -51,9 +52,35 @@ export function getMemoryRoot(): string {
 }
 
 export function deriveProjectName(cwd: string): string {
-  // Extract last path component as project name
-  // /Users/sije/codebases/lcsh → lcsh
+  // Try to derive a canonical name from the git remote URL.
+  // This ensures the same repo gets the same project name regardless
+  // of what folder it's cloned into on different machines.
+  //   git@github.com:user/my-app.git  → my-app
+  //   https://github.com/user/my-app  → my-app
+  // Falls back to folder name for non-git directories.
+  try {
+    const remote = execSync("git remote get-url origin", {
+      cwd,
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 3000,
+    })
+      .toString()
+      .trim();
+    if (remote) {
+      const name = extractRepoName(remote);
+      if (name) return name;
+    }
+  } catch {
+    // Not a git repo or no origin remote — fall back to folder name
+  }
   return basename(cwd);
+}
+
+export function extractRepoName(remoteUrl: string): string | null {
+  // SSH: git@github.com:user/repo.git
+  const sshMatch = remoteUrl.match(/[:\/]([^/]+?)(?:\.git)?$/);
+  if (sshMatch) return sshMatch[1];
+  return null;
 }
 
 export function formatDate(timestamp: string): string {
