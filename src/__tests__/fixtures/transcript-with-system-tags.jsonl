@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"<system-reminder>You are a helpful assistant</system-reminder>Fix the login page<local-command-caveat>running in safe mode</local-command-caveat>"},"timestamp":"2026-03-09T12:00:00.000Z","sessionId":"test-session-004","cwd":"/Users/sije/codebases/webapp"}
+{"type":"assistant","message":{"role":"assistant","content":"I'll fix the login page for you.","model":"claude-sonnet-4-20250514"},"timestamp":"2026-03-09T12:00:05.000Z","sessionId":"test-session-004"}

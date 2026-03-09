@@ -1,0 +1,26 @@
+{
+  "name": "claude-memory",
+  "version": "0.1.0",
+  "description": "Cross-machine Claude Code memory system",
+  "type": "module",
+  "scripts": {
+    "capture": "tsx src/capture.ts",
+    "server": "tsx src/server.ts",
+    "rebuild": "tsx src/rebuild-index.ts",
+    "sync-pull": "tsx src/sync.ts pull",
+    "sync-push": "tsx src/sync.ts push",
+    "test": "tsx --test src/__tests__/*.test.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "minisearch": "^7.1.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

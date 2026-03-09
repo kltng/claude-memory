@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"Hello, can you help me fix a bug?"},"timestamp":"2026-03-09T10:30:00.000Z","sessionId":"test-session-001","cwd":"/Users/sije/codebases/myproject","gitBranch":"main"}
+{"type":"assistant","message":{"role":"assistant","content":"Sure! I'd be happy to help you fix a bug. Can you describe the issue?","model":"claude-sonnet-4-20250514"},"timestamp":"2026-03-09T10:30:05.000Z","sessionId":"test-session-001"}
+{"type":"user","message":{"role":"user","content":"The function returns null instead of an array."},"timestamp":"2026-03-09T10:30:15.000Z","sessionId":"test-session-001"}
+{"type":"assistant","message":{"role":"assistant","content":"I see the issue. The function has a missing return statement in the else branch. Let me fix that.","model":"claude-sonnet-4-20250514"},"timestamp":"2026-03-09T10:30:20.000Z","sessionId":"test-session-001"}
