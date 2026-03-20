@@ -9,7 +9,8 @@ cat | CLAUDE_MEMORY_ROOT="$MEMORY_ROOT" npx --prefix "$MEMORY_ROOT" tsx "$MEMORY
 
 # Git sync: add + commit + push
 cd "$MEMORY_ROOT"
-git add sessions/ summaries/ INDEX.md 2>/dev/null
+git add sessions/ summaries/ 2>/dev/null
+git add INDEX.md 2>/dev/null || true
 if ! git diff --cached --quiet 2>/dev/null; then
   git commit -m "memory: auto-capture $(date '+%Y-%m-%d %H:%M')" --no-gpg-sign 2>/dev/null
   git push 2>/dev/null || true
