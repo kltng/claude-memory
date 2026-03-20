@@ -290,7 +290,8 @@ claude-memory/
           {
             "type": "command",
             "command": "~/codebases/claude-memory/hooks/session-end.sh",
-            "timeout": 30
+            "timeout": 120,
+            "async": true
           }
         ]
       }

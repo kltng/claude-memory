@@ -83,7 +83,8 @@ function mergeHooks(): { changed: boolean; message: string } {
         {
           type: "command",
           command: sessionEndCommand,
-          timeout: 30,
+          timeout: 120,
+          async: true,
         },
       ],
     });
